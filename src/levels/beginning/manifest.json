@@ -1,0 +1,17 @@
+{
+  "bundles": [
+    {
+      "name": "begin_screen",
+      "assets": [
+        {
+          "alias": "tree",
+          "src": "/tree.png"
+        },
+        {
+          "alias": "grass",
+          "src": "/grass.png"
+        }
+      ]
+    }
+  ]
+}
