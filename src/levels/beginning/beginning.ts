@@ -1,25 +1,21 @@
-import { Application, Assets, Sprite } from 'pixi.js';
+import { Assets, TilingSprite } from 'pixi.js';
 
 import manifest from './manifest.json';
+import { App } from '@/main.ts';
 
 // TODO: Make tiling sprite https://pixijs.com/8.x/examples/sprite/tiling-sprite
-export async function init(app: Application) {
+export async function init() {
   Assets.init({ manifest });
   Assets.backgroundLoadBundle(['begin_screen']);
 
   const grass = await Assets.load('grass');
 
-  const columns = Math.ceil(app.screen.width / grass.frame.width);
-  const rows = Math.ceil(app.screen.height / grass.frame.height);
-
-  for (let i = 0; i < columns; i++) {
-    for (let j = 0; j < rows; j++) {
-      const grassSprite = new Sprite(grass);
-
-      grassSprite.x = i * grass.frame.width;
-      grassSprite.y = j * grass.frame.height;
-
-      app.stage.addChildAt(grassSprite, 0);
-    }
-  }
+  const tilingSprite = new TilingSprite({
+    texture: grass,
+    width: App.screen.width,
+    height: App.screen.height,
+  });
+  console.log(tilingSprite);
+  tilingSprite.position.set(0, 0);
+  App.stage.addChildAt(tilingSprite, 0);
 }

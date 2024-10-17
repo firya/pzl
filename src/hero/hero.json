@@ -88,10 +88,13 @@
     "scale": 1
   },
   "animations": {
-    "walkBottom": ["walkBottom1", "walkBottom2", "walkBottom3", "walkBottom4"],
-    "walkTop": ["walkTop1", "walkTop2", "walkTop3", "walkTop4"],
+    "walkDown": ["walkBottom1", "walkBottom2", "walkBottom3", "walkBottom4"],
+    "walkUp": ["walkTop1", "walkTop2", "walkTop3", "walkTop4"],
     "walkLeft": ["walkLeft1", "walkLeft2", "walkLeft3", "walkLeft4"],
     "walkRight": ["walkRight1", "walkRight2", "walkRight3", "walkRight4"],
-    "idle": ["walkRight2"]
+    "idleLeft": ["walkLeft3"],
+    "idleRight": ["walkRight2"],
+    "idleUp": ["walkTop1"],
+    "idleDown": ["walkBottom1"]
   }
 }

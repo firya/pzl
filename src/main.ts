@@ -1,14 +1,17 @@
 import './style.css';
 import { Application } from 'pixi.js';
 import * as beginning from './levels/beginning/beginning.ts';
-import * as hero from './hero/hero.ts';
+import { Hero } from './hero/hero.ts';
+
+export const App = new Application();
 
 (async () => {
-  const app = new Application();
+  await App.init({ background: '#1099bb', resizeTo: window });
+  document.body.appendChild(App.canvas);
 
-  await app.init({ background: '#1099bb', resizeTo: window });
-  document.body.appendChild(app.canvas);
-
-  beginning.init(app);
-  hero.init(app);
+  beginning.init();
+  new Hero({
+    x: (App.screen.width - 42) / 2,
+    y: (App.screen.height - 64) / 2,
+  });
 })();
