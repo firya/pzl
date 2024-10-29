@@ -9,7 +9,7 @@ import {
 } from 'pixi.js';
 import keycode from 'keycode';
 import heroAnimation from './hero.json';
-import { App } from '@/main.ts';
+import { App, eventEmitter } from '@/main.ts';
 
 export type Position = { x: number; y: number };
 type Direction = 'Left' | 'Right' | 'Up' | 'Down';
@@ -17,6 +17,7 @@ type Direction = 'Left' | 'Right' | 'Up' | 'Down';
 const DEFAULT_SPEED = 3;
 const SPRINT_SPEED = 5;
 const ANIMATION_SPEED = 0.16;
+const FOOTSTEP_HEIGHT = 16;
 
 export class Hero {
   private heroContainer: Container;
@@ -24,16 +25,19 @@ export class Hero {
   private animatedSprite: AnimatedSprite;
   private shadow: Graphics;
   private keys: { [key: string]: boolean } = {};
+  private heroFootStepOffset: number;
   public speed: number = DEFAULT_SPEED;
+  public startPosition: Position;
   public position: Position = { x: 0, y: 0 };
   public direction: Direction = 'Left';
 
   constructor(position: Position) {
     this.init();
-    this.position = position;
+    this.startPosition = position;
   }
 
   private async init() {
+    eventEmitter.on('changeHeroPosition', this.setPosition.bind(this));
     await Assets.load(heroAnimation.meta.image);
 
     this.spriteSheet = new Spritesheet(
@@ -53,14 +57,23 @@ export class Hero {
     );
 
     this.heroContainer = new Container();
-    this.shadow = new Graphics().ellipse(21, 57, 18, 8).fill([0, 0, 0, 0.3]);
+    this.shadow = new Graphics()
+      .ellipse(21, 57, 18, FOOTSTEP_HEIGHT / 2)
+      .fill([0, 0, 0, 0.3]);
     this.heroContainer.addChild(this.shadow);
     this.heroContainer.addChild(this.animatedSprite);
 
-    App.stage.addChildAt(this.heroContainer, 0);
+    this.heroFootStepOffset =
+      this.heroContainer.height / 2 - FOOTSTEP_HEIGHT / 2;
+
+    this.heroContainer.x = (App.screen.width - this.heroContainer.width) / 2;
+    this.heroContainer.y = (App.screen.height - this.heroContainer.height) / 2;
+
+    App.stage.addChildAt(this.heroContainer, 1);
+
+    this.checkNewPosition(this.startPosition);
 
     this.setupControls();
-    this.setPosition();
   }
 
   setAnimatedSprite(
@@ -76,9 +89,17 @@ export class Hero {
     this.direction = direction;
   }
 
-  setPosition(position?: Position) {
-    this.heroContainer.x = position?.x || this.position.x;
-    this.heroContainer.y = position?.y || this.position.y;
+  checkNewPosition(newPosition: Position) {
+    eventEmitter.emit('checkHeroPosition', {
+      x: newPosition.x,
+      y: newPosition.y,
+      xOffset: 0,
+      yOffset: this.heroFootStepOffset,
+    });
+  }
+
+  public setPosition(position: Position) {
+    this.position = { ...position };
   }
 
   setSpeed(value: number) {
@@ -86,7 +107,7 @@ export class Hero {
   }
 
   resetPosition() {
-    this.setPosition();
+    this.checkNewPosition(this.startPosition);
   }
 
   setupControls() {
@@ -125,8 +146,12 @@ export class Hero {
         ySpeed = ySpeed / Math.sqrt(2);
       }
 
-      this.heroContainer.x += xSpeed;
-      this.heroContainer.y += ySpeed;
+      if (!xSpeed && !ySpeed) return;
+
+      this.checkNewPosition({
+        x: this.position.x + xSpeed,
+        y: this.position.y + ySpeed,
+      });
     });
   }
 
