@@ -2,6 +2,7 @@ import { Assets, Container, Sprite } from 'pixi.js';
 
 import manifest from './manifest.json';
 import { App, eventEmitter } from '@/main.ts';
+import { Position } from '@/hero/hero.ts';
 
 const levelMap = [
   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -12,8 +13,6 @@ const levelMap = [
   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ];
 const tileSize = 500;
-
-type Position = { x: number; y: number };
 
 export class Beginning {
   private levelContainer: Container;
@@ -49,18 +48,24 @@ export class Beginning {
     }
   }
 
-  checkCollision(position: Position, force = false) {
+  checkCollision(oldPosition: Position, newPosition: Position, force = false) {
     if (force) {
-      this.changeWorldPosition(position);
+      this.changeWorldPosition(newPosition);
       return;
     }
-    const xTile = Math.floor(position.x / tileSize);
-    const yTile = Math.floor(position.y / tileSize);
-    if (position.x < 0 || position.x > levelMap[0].length * tileSize) return;
-    if (position.y < 0 || position.y > levelMap.length * tileSize) return;
-    if (!levelMap[yTile][xTile]) return;
 
-    this.changeWorldPosition(position);
+    let positionResult = { ...newPosition };
+    const oldTileX = Math.floor(oldPosition.x / tileSize);
+    const newtileX = Math.floor(newPosition.x / tileSize);
+    const oldTileY = Math.floor(oldPosition.y / tileSize);
+    const newtileY = Math.floor(newPosition.y / tileSize);
+    if (newPosition.x < 0 || newPosition.x > levelMap[0].length * tileSize)
+      return;
+    if (newPosition.y < 0 || newPosition.y > levelMap.length * tileSize) return;
+    if (!levelMap[newtileY][oldTileX]) positionResult.y = oldPosition.y;
+    if (!levelMap[oldTileY][newtileX]) positionResult.x = oldPosition.x;
+
+    this.changeWorldPosition(positionResult);
   }
 
   changeWorldPosition(position: Position) {

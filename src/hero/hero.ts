@@ -68,7 +68,7 @@ export class Hero {
 
     App.stage.addChildAt(this.heroContainer, 1);
 
-    this.checkNewPosition(this.startPosition, true);
+    this.checkNewPosition(this.startPosition, this.startPosition, true);
 
     this.setupControls();
   }
@@ -86,15 +86,12 @@ export class Hero {
     this.direction = direction;
   }
 
-  checkNewPosition(newPosition: Position, force = false) {
-    eventEmitter.emit(
-      'checkHeroPosition',
-      {
-        x: newPosition.x,
-        y: newPosition.y,
-      },
-      force
-    );
+  checkNewPosition(
+    oldPosition: Position,
+    newPosition: Position,
+    force = false
+  ) {
+    eventEmitter.emit('checkHeroPosition', oldPosition, newPosition, force);
   }
 
   public setPosition(position: Position) {
@@ -106,7 +103,7 @@ export class Hero {
   }
 
   resetPosition() {
-    this.checkNewPosition(this.startPosition);
+    this.checkNewPosition(this.startPosition, this.startPosition);
   }
 
   setupControls() {
@@ -147,7 +144,7 @@ export class Hero {
 
       if (!xSpeed && !ySpeed) return;
 
-      this.checkNewPosition({
+      this.checkNewPosition(this.position, {
         x: this.position.x + xSpeed,
         y: this.position.y + ySpeed,
       });
