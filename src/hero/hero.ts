@@ -25,7 +25,6 @@ export class Hero {
   private animatedSprite: AnimatedSprite;
   private shadow: Graphics;
   private keys: { [key: string]: boolean } = {};
-  private heroFootStepOffset: number;
   public speed: number = DEFAULT_SPEED;
   public startPosition: Position;
   public position: Position = { x: 0, y: 0 };
@@ -63,15 +62,13 @@ export class Hero {
     this.heroContainer.addChild(this.shadow);
     this.heroContainer.addChild(this.animatedSprite);
 
-    this.heroFootStepOffset =
-      this.heroContainer.height / 2 - FOOTSTEP_HEIGHT / 2;
-
     this.heroContainer.x = (App.screen.width - this.heroContainer.width) / 2;
-    this.heroContainer.y = (App.screen.height - this.heroContainer.height) / 2;
+    this.heroContainer.y =
+      App.screen.height / 2 - this.heroContainer.height + FOOTSTEP_HEIGHT / 2;
 
     App.stage.addChildAt(this.heroContainer, 1);
 
-    this.checkNewPosition(this.startPosition);
+    this.checkNewPosition(this.startPosition, true);
 
     this.setupControls();
   }
@@ -89,13 +86,15 @@ export class Hero {
     this.direction = direction;
   }
 
-  checkNewPosition(newPosition: Position) {
-    eventEmitter.emit('checkHeroPosition', {
-      x: newPosition.x,
-      y: newPosition.y,
-      xOffset: 0,
-      yOffset: this.heroFootStepOffset,
-    });
+  checkNewPosition(newPosition: Position, force = false) {
+    eventEmitter.emit(
+      'checkHeroPosition',
+      {
+        x: newPosition.x,
+        y: newPosition.y,
+      },
+      force
+    );
   }
 
   public setPosition(position: Position) {

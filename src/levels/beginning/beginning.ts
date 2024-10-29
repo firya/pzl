@@ -13,7 +13,7 @@ const levelMap = [
 ];
 const tileSize = 500;
 
-type Position = { x: number; y: number; xOffset: number; yOffset: number };
+type Position = { x: number; y: number };
 
 export class Beginning {
   private levelContainer: Container;
@@ -49,22 +49,24 @@ export class Beginning {
     }
   }
 
-  checkCollision(position: Position) {
-    if (position.x < 0 || position.x > levelMap[0].length * tileSize) return;
-    if (position.y < 0 || position.y > levelMap.length * tileSize) return;
+  checkCollision(position: Position, force = false) {
+    if (force) {
+      this.changeWorldPosition(position);
+      return;
+    }
     const xTile = Math.floor(position.x / tileSize);
     const yTile = Math.floor(position.y / tileSize);
+    if (position.x < 0 || position.x > levelMap[0].length * tileSize) return;
+    if (position.y < 0 || position.y > levelMap.length * tileSize) return;
     if (!levelMap[yTile][xTile]) return;
 
-    eventEmitter.emit('changeHeroPosition', position);
     this.changeWorldPosition(position);
   }
 
   changeWorldPosition(position: Position) {
     if (!this.levelContainer) return;
-    this.levelContainer.x =
-      -position.x + App.screen.width / 2 + position.xOffset;
-    this.levelContainer.y =
-      -position.y + App.screen.height / 2 + position.yOffset;
+    eventEmitter.emit('changeHeroPosition', position);
+    this.levelContainer.x = -position.x + App.screen.width / 2;
+    this.levelContainer.y = -position.y + App.screen.height / 2;
   }
 }
