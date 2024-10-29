@@ -12,10 +12,13 @@ import heroAnimation from './hero.json';
 import { App, eventEmitter } from '@/main.ts';
 
 export type Position = { x: number; y: number };
+export type Speed = { x: number; y: number };
 type Direction = 'Left' | 'Right' | 'Up' | 'Down';
 
 const DEFAULT_SPEED = 3;
 const SPRINT_SPEED = 5;
+const DASH_SPEED = 10;
+const DASH_TIME = 300;
 const ANIMATION_SPEED = 0.16;
 const FOOTSTEP_HEIGHT = 16;
 
@@ -25,10 +28,12 @@ export class Hero {
   private animatedSprite: AnimatedSprite;
   private shadow: Graphics;
   private keys: { [key: string]: boolean } = {};
+  public currentSpeed: Speed = { x: 0, y: 0 };
   public speed: number = DEFAULT_SPEED;
   public startPosition: Position;
   public position: Position = { x: 0, y: 0 };
   public direction: Direction = 'Left';
+  public isUncontrolled: boolean = false;
 
   constructor(position: Position) {
     this.init();
@@ -49,6 +54,11 @@ export class Hero {
     this.animatedSprite = new AnimatedSprite(
       this.spriteSheet.animations[`idle${this.direction}`]
     );
+
+    this.animatedSprite.pivot.x = this.animatedSprite.width / 2;
+    this.animatedSprite.pivot.y = this.animatedSprite.height / 2;
+    this.animatedSprite.position.x = this.animatedSprite.width / 2;
+    this.animatedSprite.position.y = this.animatedSprite.height / 2;
 
     this.setAnimatedSprite(
       this.spriteSheet.animations[`idle${this.direction}`],
@@ -82,10 +92,6 @@ export class Hero {
     this.animatedSprite.play();
   }
 
-  setDirection(direction: Direction) {
-    this.direction = direction;
-  }
-
   checkNewPosition(
     oldPosition: Position,
     newPosition: Position,
@@ -111,6 +117,7 @@ export class Hero {
       if (e.repeat) return;
       this.keys[keycode(e)] = true;
       this.updateAnimation();
+      this.keyPress();
     });
 
     window.addEventListener('keyup', (e) => {
@@ -121,69 +128,158 @@ export class Hero {
     App.ticker.add(() => {
       if (!this.heroContainer) return;
 
-      let xSpeed = 0;
-      let ySpeed = 0;
-
-      if (this.keys['up']) {
-        ySpeed -= this.speed;
-      }
-      if (this.keys['down']) {
-        ySpeed += this.speed;
-      }
-      if (this.keys['left']) {
-        xSpeed -= this.speed;
-      }
-      if (this.keys['right']) {
-        xSpeed += this.speed;
-      }
-
-      if (xSpeed !== 0 && ySpeed !== 0) {
-        xSpeed = xSpeed / Math.sqrt(2);
-        ySpeed = ySpeed / Math.sqrt(2);
-      }
-
-      if (!xSpeed && !ySpeed) return;
-
-      this.checkNewPosition(this.position, {
-        x: this.position.x + xSpeed,
-        y: this.position.y + ySpeed,
-      });
+      this.updatePosition();
     });
   }
 
-  updateAnimation() {
+  private updatePosition() {
+    this.resetCurrentSpeed();
+
+    if (this.keys['up'] && !this.isUncontrolled)
+      this.currentSpeed.y -= this.speed;
+    if (this.keys['down'] && !this.isUncontrolled)
+      this.currentSpeed.y += this.speed;
+    if (this.keys['left'] && !this.isUncontrolled)
+      this.currentSpeed.x -= this.speed;
+    if (this.keys['right'] && !this.isUncontrolled)
+      this.currentSpeed.x += this.speed;
+
+    this.fixDiagonalSpeed();
+
+    if (!this.currentSpeed.x && !this.currentSpeed.y) return;
+
+    this.setDirection();
+
+    this.checkNewPosition(this.position, {
+      x: this.position.x + this.currentSpeed.x,
+      y: this.position.y + this.currentSpeed.y,
+    });
+  }
+
+  resetCurrentSpeed() {
+    this.currentSpeed = {
+      x: 0,
+      y: 0,
+    };
+  }
+
+  fixDiagonalSpeed() {
+    if (this.currentSpeed.x !== 0 && this.currentSpeed.y !== 0) {
+      this.currentSpeed.x = this.currentSpeed.x / Math.sqrt(2);
+      this.currentSpeed.y = this.currentSpeed.y / Math.sqrt(2);
+    }
+  }
+
+  startDash() {
+    const previousSpeed = this.speed;
+    this.isUncontrolled = true;
+
+    const dashDirection = {
+      x:
+        this.currentSpeed.x === 0
+          ? this.direction === 'Left'
+            ? -1
+            : this.direction === 'Right'
+              ? 1
+              : 0
+          : Math.sign(this.currentSpeed.x),
+      y:
+        this.currentSpeed.y === 0
+          ? this.direction === 'Up'
+            ? -1
+            : this.direction === 'Down'
+              ? 1
+              : 0
+          : Math.sign(this.currentSpeed.y),
+    };
+
+    this.setSpeed(DASH_SPEED);
+
+    const dashStartTime = Date.now();
+    const startRotation = this.animatedSprite.rotation;
+    const rotationDirection =
+      dashDirection.x < 0 ? -1 : dashDirection.x > 0 ? 1 : 0;
+    const targetRotation = startRotation + Math.PI * 2 * rotationDirection;
+
+    const dashTicker = () => {
+      const elapsedTime = Date.now() - dashStartTime;
+      if (elapsedTime >= DASH_TIME) {
+        endDash();
+        return;
+      }
+
+      const progress = Math.min(elapsedTime / DASH_TIME, 1);
+
+      this.animatedSprite.rotation =
+        startRotation + (targetRotation - startRotation) * progress;
+
+      let moveX = dashDirection.x * this.speed;
+      let moveY = dashDirection.y * this.speed;
+
+      if (moveX !== 0 && moveY !== 0) {
+        moveX = moveX / Math.sqrt(2);
+        moveY = moveY / Math.sqrt(2);
+      }
+
+      this.checkNewPosition(this.position, {
+        x: this.position.x + moveX,
+        y: this.position.y + moveY,
+      });
+    };
+
+    const endDash = () => {
+      App.ticker.remove(dashTicker);
+      this.setSpeed(previousSpeed);
+      this.isUncontrolled = false;
+      this.animatedSprite.rotation = targetRotation % (Math.PI * 2);
+    };
+
+    App.ticker.add(dashTicker);
+  }
+
+  setDirection() {
+    if (this.currentSpeed.y < 0) this.direction = 'Up';
+    if (this.currentSpeed.y > 0) this.direction = 'Down';
+    if (this.currentSpeed.x > 0) this.direction = 'Right';
+    if (this.currentSpeed.x < 0) this.direction = 'Left';
+  }
+
+  keyPress() {
     if (this.keys['r']) {
       this.resetPosition();
     }
+    if (this.keys['space'] && !this.isUncontrolled) {
+      this.startDash();
+      return;
+    }
+    if (this.isUncontrolled) return;
 
+    this.setSpeed(this.keys['shift'] ? SPRINT_SPEED : DEFAULT_SPEED);
+  }
+
+  updateAnimation() {
     const animationSpeed = this.keys['shift']
       ? ANIMATION_SPEED * 2
       : ANIMATION_SPEED;
 
-    this.setSpeed(this.keys['shift'] ? SPRINT_SPEED : DEFAULT_SPEED);
-
-    if (this.keys['up']) {
-      this.setDirection('Up');
+    if (this.keys['right']) {
+      this.setAnimatedSprite(
+        this.spriteSheet.animations.walkRight,
+        animationSpeed
+      );
+    } else if (this.keys['left']) {
+      this.setAnimatedSprite(
+        this.spriteSheet.animations.walkLeft,
+        animationSpeed
+      );
+    } else if (this.keys['up']) {
       this.setAnimatedSprite(
         this.spriteSheet.animations.walkUp,
         animationSpeed
       );
     } else if (this.keys['down']) {
-      this.setDirection('Down');
       this.setAnimatedSprite(
         this.spriteSheet.animations.walkDown,
-        animationSpeed
-      );
-    } else if (this.keys['left']) {
-      this.setDirection('Left');
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkLeft,
-        animationSpeed
-      );
-    } else if (this.keys['right']) {
-      this.setDirection('Right');
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkRight,
         animationSpeed
       );
     } else {
