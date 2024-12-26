@@ -1,7 +1,7 @@
 import { Assets, Container, Sprite } from 'pixi.js';
 
 import { App, eventEmitter } from '@/main.ts';
-import { Position } from '@/hero/hero.ts';
+import { Coordinates } from '@/types/common.ts';
 
 const tileSize = 500;
 export type LevelMap = Array<Array<number>>;
@@ -39,7 +39,11 @@ export class World {
     }
   }
 
-  checkCollision(oldPosition: Position, newPosition: Position, force = false) {
+  checkCollision(
+    oldPosition: Coordinates,
+    newPosition: Coordinates,
+    force = false
+  ) {
     if (force) {
       this.changeWorldPosition(newPosition);
       return;
@@ -66,7 +70,7 @@ export class World {
     return this.levelMap[tileY][tileX];
   }
 
-  changeWorldPosition(position: Position) {
+  changeWorldPosition(position: Coordinates) {
     if (!this.levelContainer) return;
     eventEmitter.emit('changeHeroPosition', position);
     this.levelContainer.x = -position.x + App.screen.width / 2;

@@ -10,15 +10,17 @@ import {
 import keycode from 'keycode';
 import heroAnimation from './hero.json';
 import { App, eventEmitter } from '@/main.ts';
+import { Coordinates } from '@/types/common.ts';
+import {
+  heroResetSpeed,
+  heroResetSpeedVector,
+  heroSetDirection,
+  heroSetPosition,
+  heroSetSpeedVector,
+  heroSetSprint,
+  heroStore,
+} from '@/stores/hero/hero.ts';
 
-export type Position = { x: number; y: number };
-export type Speed = { x: number; y: number };
-type Direction = 'Left' | 'Right' | 'Up' | 'Down';
-
-const DEFAULT_SPEED = 3;
-const SPRINT_SPEED = 5;
-const DASH_SPEED = 10;
-const DASH_TIME = 300;
 const ANIMATION_SPEED = 0.16;
 const FOOTSTEP_HEIGHT = 16;
 
@@ -28,20 +30,38 @@ export class Hero {
   private animatedSprite: AnimatedSprite;
   private shadow: Graphics;
   private keys: { [key: string]: boolean } = {};
-  public currentSpeed: Speed = { x: 0, y: 0 };
-  public speed: number = DEFAULT_SPEED;
-  public startPosition: Position;
-  public position: Position = { x: 0, y: 0 };
-  public direction: Direction = 'Left';
-  public isUncontrolled: boolean = false;
 
-  constructor(position: Position) {
+  constructor(position: Coordinates) {
+    heroSetPosition(position);
     this.init();
-    this.startPosition = position;
+  }
+
+  get direction() {
+    return heroStore.get().direction;
+  }
+
+  get startPosition() {
+    return heroStore.get().startPosition;
+  }
+
+  get position() {
+    return heroStore.get().position;
+  }
+
+  get speed() {
+    return heroStore.get().speed;
+  }
+
+  get speedVector() {
+    return heroStore.get().speedVector;
+  }
+
+  get isUncontrolled() {
+    return heroStore.get().isUncontrolled;
   }
 
   private async init() {
-    eventEmitter.on('changeHeroPosition', this.setPosition.bind(this));
+    eventEmitter.on('changeHeroPosition', heroSetPosition);
     await Assets.load(heroAnimation.meta.image);
 
     this.spriteSheet = new Spritesheet(
@@ -93,19 +113,11 @@ export class Hero {
   }
 
   checkNewPosition(
-    oldPosition: Position,
-    newPosition: Position,
+    oldPosition: Coordinates | null,
+    newPosition: Coordinates | null,
     force = false
   ) {
     eventEmitter.emit('checkHeroPosition', oldPosition, newPosition, force);
-  }
-
-  public setPosition(position: Position) {
-    this.position = { ...position };
-  }
-
-  setSpeed(value: number) {
-    this.speed = value;
   }
 
   resetPosition() {
@@ -133,128 +145,52 @@ export class Hero {
   }
 
   private updatePosition() {
-    this.resetCurrentSpeed();
+    heroResetSpeedVector();
 
     if (this.keys['up'] && !this.isUncontrolled)
-      this.currentSpeed.y -= this.speed;
+      this.speedVector.y -= this.speed;
     if (this.keys['down'] && !this.isUncontrolled)
-      this.currentSpeed.y += this.speed;
+      this.speedVector.y += this.speed;
     if (this.keys['left'] && !this.isUncontrolled)
-      this.currentSpeed.x -= this.speed;
+      this.speedVector.x -= this.speed;
     if (this.keys['right'] && !this.isUncontrolled)
-      this.currentSpeed.x += this.speed;
+      this.speedVector.x += this.speed;
 
     this.fixDiagonalSpeed();
 
-    if (!this.currentSpeed.x && !this.currentSpeed.y) return;
+    if (!this.speedVector.x && !this.speedVector.y) return;
 
     this.setDirection();
 
     this.checkNewPosition(this.position, {
-      x: this.position.x + this.currentSpeed.x,
-      y: this.position.y + this.currentSpeed.y,
+      x: this.position.x + this.speedVector.x,
+      y: this.position.y + this.speedVector.y,
     });
   }
 
-  resetCurrentSpeed() {
-    this.currentSpeed = {
-      x: 0,
-      y: 0,
-    };
-  }
-
   fixDiagonalSpeed() {
-    if (this.currentSpeed.x !== 0 && this.currentSpeed.y !== 0) {
-      this.currentSpeed.x = this.currentSpeed.x / Math.sqrt(2);
-      this.currentSpeed.y = this.currentSpeed.y / Math.sqrt(2);
+    if (this.speedVector.x !== 0 && this.speedVector.y !== 0) {
+      heroSetSpeedVector({
+        x: this.speedVector.x / Math.sqrt(2),
+        y: this.speedVector.y / Math.sqrt(2),
+      });
     }
   }
 
-  startDash() {
-    const previousSpeed = this.speed;
-    this.isUncontrolled = true;
-
-    const dashDirection = {
-      x:
-        this.currentSpeed.x === 0
-          ? this.direction === 'Left'
-            ? -1
-            : this.direction === 'Right'
-              ? 1
-              : 0
-          : Math.sign(this.currentSpeed.x),
-      y:
-        this.currentSpeed.y === 0
-          ? this.direction === 'Up'
-            ? -1
-            : this.direction === 'Down'
-              ? 1
-              : 0
-          : Math.sign(this.currentSpeed.y),
-    };
-
-    this.setSpeed(DASH_SPEED);
-
-    const dashStartTime = Date.now();
-    const startRotation = this.animatedSprite.rotation;
-    const rotationDirection =
-      dashDirection.x < 0 ? -1 : dashDirection.x > 0 ? 1 : 0;
-    const targetRotation = startRotation + Math.PI * 2 * rotationDirection;
-
-    const dashTicker = () => {
-      const elapsedTime = Date.now() - dashStartTime;
-      if (elapsedTime >= DASH_TIME) {
-        endDash();
-        return;
-      }
-
-      const progress = Math.min(elapsedTime / DASH_TIME, 1);
-
-      this.animatedSprite.rotation =
-        startRotation + (targetRotation - startRotation) * progress;
-
-      let moveX = dashDirection.x * this.speed;
-      let moveY = dashDirection.y * this.speed;
-
-      if (moveX !== 0 && moveY !== 0) {
-        moveX = moveX / Math.sqrt(2);
-        moveY = moveY / Math.sqrt(2);
-      }
-
-      this.checkNewPosition(this.position, {
-        x: this.position.x + moveX,
-        y: this.position.y + moveY,
-      });
-    };
-
-    const endDash = () => {
-      App.ticker.remove(dashTicker);
-      this.setSpeed(previousSpeed);
-      this.isUncontrolled = false;
-      this.animatedSprite.rotation = targetRotation % (Math.PI * 2);
-    };
-
-    App.ticker.add(dashTicker);
-  }
-
   setDirection() {
-    if (this.currentSpeed.y < 0) this.direction = 'Up';
-    if (this.currentSpeed.y > 0) this.direction = 'Down';
-    if (this.currentSpeed.x > 0) this.direction = 'Right';
-    if (this.currentSpeed.x < 0) this.direction = 'Left';
+    if (this.speedVector.y < 0) heroSetDirection('Up');
+    if (this.speedVector.y > 0) heroSetDirection('Down');
+    if (this.speedVector.x > 0) heroSetDirection('Right');
+    if (this.speedVector.x < 0) heroSetDirection('Left');
   }
 
   keyPress() {
     if (this.keys['r']) {
       this.resetPosition();
     }
-    if (this.keys['space'] && !this.isUncontrolled) {
-      this.startDash();
-      return;
-    }
     if (this.isUncontrolled) return;
 
-    this.setSpeed(this.keys['shift'] ? SPRINT_SPEED : DEFAULT_SPEED);
+    this.keys['shift'] ? heroSetSprint() : heroResetSpeed();
   }
 
   updateAnimation() {
