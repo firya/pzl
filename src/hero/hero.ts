@@ -13,15 +13,16 @@ import { App, eventEmitter } from '@/main.ts';
 import { Coordinates } from '@/types/common.ts';
 import {
   heroResetSpeed,
-  heroResetSpeedVector,
-  heroSetDirection,
   heroSetPosition,
-  heroSetSpeedVector,
   heroSetSprint,
-  heroStore,
+  $hero,
+  $heroSpeedVector,
+  $heroAnimation,
+  $heroAnimationsSpeed,
 } from '@/stores/hero/hero.ts';
+import { $keys } from '@/stores/keys/keys.ts';
+import { KeysState } from '@/stores/keys/keys.type.ts';
 
-const ANIMATION_SPEED = 0.16;
 const FOOTSTEP_HEIGHT = 16;
 
 export class Hero {
@@ -29,35 +30,22 @@ export class Hero {
   private spriteSheet: Spritesheet;
   private animatedSprite: AnimatedSprite;
   private shadow: Graphics;
-  private keys: { [key: string]: boolean } = {};
 
   constructor(position: Coordinates) {
     heroSetPosition(position);
     this.init();
   }
 
-  get direction() {
-    return heroStore.get().direction;
-  }
-
   get startPosition() {
-    return heroStore.get().startPosition;
+    return $hero.get().startPosition;
   }
 
   get position() {
-    return heroStore.get().position;
-  }
-
-  get speed() {
-    return heroStore.get().speed;
-  }
-
-  get speedVector() {
-    return heroStore.get().speedVector;
+    return $hero.get().position;
   }
 
   get isUncontrolled() {
-    return heroStore.get().isUncontrolled;
+    return $hero.get().isUncontrolled;
   }
 
   private async init() {
@@ -71,8 +59,9 @@ export class Hero {
 
     await this.spriteSheet.parse();
 
+    const animation = $heroAnimation.get();
     this.animatedSprite = new AnimatedSprite(
-      this.spriteSheet.animations[`idle${this.direction}`]
+      this.spriteSheet.animations[animation]
     );
 
     this.animatedSprite.pivot.x = this.animatedSprite.width / 2;
@@ -81,8 +70,8 @@ export class Hero {
     this.animatedSprite.position.y = this.animatedSprite.height / 2;
 
     this.setAnimatedSprite(
-      this.spriteSheet.animations[`idle${this.direction}`],
-      ANIMATION_SPEED
+      this.spriteSheet.animations[animation],
+      $heroAnimationsSpeed.get()
     );
 
     this.heroContainer = new Container();
@@ -127,13 +116,20 @@ export class Hero {
   setupControls() {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
-      this.keys[keycode(e)] = true;
+
+      const pressedKey = keycode(e) as keyof KeysState;
+      if ($keys.get()[pressedKey] === undefined) return;
+
+      $keys.setKey(pressedKey, true);
       this.updateAnimation();
       this.keyPress();
     });
 
     window.addEventListener('keyup', (e) => {
-      this.keys[keycode(e)] = false;
+      const pressedKey = keycode(e) as keyof KeysState;
+      if ($keys.get()[pressedKey] === undefined) return;
+
+      $keys.setKey(pressedKey, false);
       this.updateAnimation();
     });
 
@@ -145,84 +141,29 @@ export class Hero {
   }
 
   private updatePosition() {
-    heroResetSpeedVector();
+    const speedVector = $heroSpeedVector.get();
 
-    if (this.keys['up'] && !this.isUncontrolled)
-      this.speedVector.y -= this.speed;
-    if (this.keys['down'] && !this.isUncontrolled)
-      this.speedVector.y += this.speed;
-    if (this.keys['left'] && !this.isUncontrolled)
-      this.speedVector.x -= this.speed;
-    if (this.keys['right'] && !this.isUncontrolled)
-      this.speedVector.x += this.speed;
-
-    this.fixDiagonalSpeed();
-
-    if (!this.speedVector.x && !this.speedVector.y) return;
-
-    this.setDirection();
+    if (!speedVector.x && !speedVector.y) return;
 
     this.checkNewPosition(this.position, {
-      x: this.position.x + this.speedVector.x,
-      y: this.position.y + this.speedVector.y,
+      x: this.position.x + speedVector.x,
+      y: this.position.y + speedVector.y,
     });
   }
 
-  fixDiagonalSpeed() {
-    if (this.speedVector.x !== 0 && this.speedVector.y !== 0) {
-      heroSetSpeedVector({
-        x: this.speedVector.x / Math.sqrt(2),
-        y: this.speedVector.y / Math.sqrt(2),
-      });
-    }
-  }
-
-  setDirection() {
-    if (this.speedVector.y < 0) heroSetDirection('Up');
-    if (this.speedVector.y > 0) heroSetDirection('Down');
-    if (this.speedVector.x > 0) heroSetDirection('Right');
-    if (this.speedVector.x < 0) heroSetDirection('Left');
-  }
-
   keyPress() {
-    if (this.keys['r']) {
+    if ($keys.get().r) {
       this.resetPosition();
     }
     if (this.isUncontrolled) return;
 
-    this.keys['shift'] ? heroSetSprint() : heroResetSpeed();
+    $keys.get().shift ? heroSetSprint() : heroResetSpeed();
   }
 
   updateAnimation() {
-    const animationSpeed = this.keys['shift']
-      ? ANIMATION_SPEED * 2
-      : ANIMATION_SPEED;
-
-    if (this.keys['right']) {
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkRight,
-        animationSpeed
-      );
-    } else if (this.keys['left']) {
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkLeft,
-        animationSpeed
-      );
-    } else if (this.keys['up']) {
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkUp,
-        animationSpeed
-      );
-    } else if (this.keys['down']) {
-      this.setAnimatedSprite(
-        this.spriteSheet.animations.walkDown,
-        animationSpeed
-      );
-    } else {
-      this.setAnimatedSprite(
-        this.spriteSheet.animations[`idle${this.direction}`],
-        animationSpeed
-      );
-    }
+    this.setAnimatedSprite(
+      this.spriteSheet.animations[$heroAnimation.get()],
+      $heroAnimationsSpeed.get()
+    );
   }
 }

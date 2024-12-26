@@ -1,58 +1,108 @@
 import { Coordinates } from '@/types/common.ts';
 import {
+  DEFAULT_ANIMATION_SPEED,
   DEFAULT_SPEED,
   defaultSpeedVector,
   SPRINT_SPEED,
 } from '@/stores/hero/hero.constants.ts';
 import { Direction, HeroState } from '@/stores/hero/hero.type.ts';
 
-import { map } from 'nanostores';
+import { batched, map } from 'nanostores';
+import { $keys } from '@/stores/keys/keys.ts';
 
-export const heroStore = map<HeroState>({
+export const $hero = map<HeroState>({
   speed: 0,
-  speedVector: defaultSpeedVector(),
   startPosition: null,
   position: { x: 0, y: 0 },
-  direction: 'Right',
   isUncontrolled: false,
 });
 
+export const $heroSpeedVector = batched(
+  [$keys, $hero],
+  (keys, { isUncontrolled, speed }): Coordinates => {
+    const result = defaultSpeedVector();
+
+    if (isUncontrolled) return result;
+
+    if (keys.up) result.y -= speed;
+    if (keys.down) result.y += speed;
+    if (keys.left) result.x -= speed;
+    if (keys.right) result.x += speed;
+
+    if (result.x !== 0 && result.y !== 0) {
+      result.x = result.x / Math.sqrt(2);
+      result.y = result.y / Math.sqrt(2);
+    }
+
+    return result;
+  }
+);
+
+let previousDirection: Direction = 'Right';
+
+export const $heroDirection = batched([$keys], (keys): Direction => {
+  if (keys.up) {
+    previousDirection = 'Up';
+    return 'Up';
+  }
+  if (keys.down) {
+    previousDirection = 'Down';
+    return 'Down';
+  }
+  if (keys.right) {
+    previousDirection = 'Right';
+    return 'Right';
+  }
+  if (keys.left) {
+    previousDirection = 'Left';
+    return 'Left';
+  }
+  return previousDirection;
+});
+
+export const $heroAnimation = batched(
+  [$keys, $heroDirection],
+  (keys, direction) => {
+    if (keys.up || keys.down || keys.left || keys.right) {
+      return `walk${direction}`;
+    }
+
+    return `idle${direction}`;
+  }
+);
+
+export const $heroAnimationsSpeed = batched([$keys], (keys) => {
+  if (keys.shift) {
+    return DEFAULT_ANIMATION_SPEED * 2;
+  }
+
+  return DEFAULT_ANIMATION_SPEED;
+});
+
 export const heroSetSpeed = (value: number) => {
-  heroStore.setKey('speed', value);
+  $hero.setKey('speed', value);
 };
 
 export const heroSetSprint = () => {
-  heroStore.setKey('speed', SPRINT_SPEED);
+  $hero.setKey('speed', SPRINT_SPEED);
 };
 
 export const heroResetSpeed = () => {
-  heroStore.setKey('speed', DEFAULT_SPEED);
-};
-
-export const heroSetSpeedVector = (value: Coordinates) => {
-  heroStore.setKey('speedVector', { ...value });
-};
-
-export const heroResetSpeedVector = () => {
-  heroStore.setKey('speedVector', defaultSpeedVector());
+  $hero.setKey('speed', DEFAULT_SPEED);
 };
 
 export const heroSetPosition = (value: Coordinates) => {
-  heroStore.setKey('position', value);
+  $hero.setKey('position', value);
 
-  if (!heroStore.get().startPosition) {
+  if (!$hero.get().startPosition) {
     heroSetStartPosition(value);
   }
 };
 
 export const heroSetStartPosition = (value: Coordinates) => {
-  heroStore.setKey('startPosition', value);
+  $hero.setKey('startPosition', value);
 };
 
 export const heroSetUncontrolled = (value = true) => {
-  heroStore.setKey('isUncontrolled', value);
-};
-
-export const heroSetDirection = (value: Direction) => {
-  heroStore.setKey('direction', value);
+  $hero.setKey('isUncontrolled', value);
 };
