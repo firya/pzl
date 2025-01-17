@@ -7,21 +7,20 @@ import {
   Container,
   Graphics,
 } from 'pixi.js';
-import keycode from 'keycode';
 import heroAnimation from './hero.json';
 import { App, eventEmitter } from '@/main.ts';
 import { Coordinates } from '@/types/common.ts';
 import {
-  heroResetSpeed,
-  heroSetPosition,
-  heroSetSprint,
   $hero,
-  $heroSpeedVector,
   $heroAnimation,
   $heroAnimationsSpeed,
+  $normalizedSpeed,
+  heroResetSpeed,
+  heroSetPosition,
+  heroSetSpeed,
+  heroSetSprint,
 } from '@/stores/hero/hero.ts';
-import { $keys } from '@/stores/keys/keys.ts';
-import { KeysState } from '@/stores/keys/keys.type.ts';
+import { controller } from '@/controller/controller.ts';
 
 const FOOTSTEP_HEIGHT = 16;
 
@@ -42,10 +41,6 @@ export class Hero {
 
   get position() {
     return $hero.get().position;
-  }
-
-  get isUncontrolled() {
-    return $hero.get().isUncontrolled;
   }
 
   private async init() {
@@ -90,6 +85,8 @@ export class Hero {
     this.checkNewPosition(this.startPosition, this.startPosition, true);
 
     this.setupControls();
+    $heroAnimation.listen((value) => this.updateAnimation(value));
+    $normalizedSpeed.listen((value) => this.updatePosition(value));
   }
 
   setAnimatedSprite(
@@ -114,55 +111,41 @@ export class Hero {
   }
 
   setupControls() {
-    window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+    controller.subscribe(['up', 'down', 'left', 'right'], (inputs) => {
+      let speedX = 0;
+      let speedY = 0;
 
-      const pressedKey = keycode(e) as keyof KeysState;
-      if ($keys.get()[pressedKey] === undefined) return;
+      if (inputs['up']) speedY = -inputs['up'];
+      if (inputs['down']) speedY = inputs['down'];
+      if (inputs['left']) speedX = -inputs['left'];
+      if (inputs['right']) speedX = inputs['right'];
 
-      $keys.setKey(pressedKey, true);
-      this.updateAnimation();
-      this.keyPress();
+      heroSetSpeed({
+        x: speedX,
+        y: speedY,
+      });
     });
-
-    window.addEventListener('keyup', (e) => {
-      const pressedKey = keycode(e) as keyof KeysState;
-      if ($keys.get()[pressedKey] === undefined) return;
-
-      $keys.setKey(pressedKey, false);
-      this.updateAnimation();
-    });
-
-    App.ticker.add(() => {
-      if (!this.heroContainer) return;
-
-      this.updatePosition();
+    controller.subscribe(['sprint'], (inputs) => {
+      if (inputs['sprint']) {
+        heroSetSprint();
+      } else {
+        heroResetSpeed();
+      }
     });
   }
 
-  private updatePosition() {
-    const speedVector = $heroSpeedVector.get();
-
-    if (!speedVector.x && !speedVector.y) return;
+  private updatePosition(speed: Coordinates) {
+    if (!speed.x && !speed.y) return;
 
     this.checkNewPosition(this.position, {
-      x: this.position.x + speedVector.x,
-      y: this.position.y + speedVector.y,
+      x: this.position.x + speed.x,
+      y: this.position.y + speed.y,
     });
   }
 
-  keyPress() {
-    if ($keys.get().r) {
-      this.resetPosition();
-    }
-    if (this.isUncontrolled) return;
-
-    $keys.get().shift ? heroSetSprint() : heroResetSpeed();
-  }
-
-  updateAnimation() {
+  updateAnimation(animation: string) {
     this.setAnimatedSprite(
-      this.spriteSheet.animations[$heroAnimation.get()],
+      this.spriteSheet.animations[animation],
       $heroAnimationsSpeed.get()
     );
   }

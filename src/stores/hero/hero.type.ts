@@ -3,7 +3,8 @@ import { Coordinates } from '@/types/common.ts';
 export type Direction = 'Left' | 'Right' | 'Up' | 'Down';
 
 export type HeroState = {
-  speed: number;
+  baseSpeed: number;
+  speed: Coordinates;
   startPosition: Coordinates | null;
   position: Coordinates;
   isUncontrolled: boolean;

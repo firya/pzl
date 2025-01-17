@@ -2,58 +2,58 @@ import { Coordinates } from '@/types/common.ts';
 import {
   DEFAULT_ANIMATION_SPEED,
   DEFAULT_SPEED,
-  defaultSpeedVector,
   SPRINT_SPEED,
 } from '@/stores/hero/hero.constants.ts';
 import { Direction, HeroState } from '@/stores/hero/hero.type.ts';
 
 import { batched, map } from 'nanostores';
-import { $keys } from '@/stores/keys/keys.ts';
 
 export const $hero = map<HeroState>({
-  speed: 0,
+  baseSpeed: DEFAULT_SPEED,
+  speed: { x: 0, y: 0 },
   startPosition: null,
   position: { x: 0, y: 0 },
   isUncontrolled: false,
 });
 
-export const $heroSpeedVector = batched(
-  [$keys, $hero],
-  (keys, { isUncontrolled, speed }): Coordinates => {
-    const result = defaultSpeedVector();
+export const $normalizedSpeed = batched(
+  [$hero],
+  ({ isUncontrolled, speed, baseSpeed }): Coordinates => {
+    if (isUncontrolled) return speed;
 
-    if (isUncontrolled) return result;
+    const magnitude = Math.sqrt(speed.x * speed.x + speed.y * speed.y);
 
-    if (keys.up) result.y -= speed;
-    if (keys.down) result.y += speed;
-    if (keys.left) result.x -= speed;
-    if (keys.right) result.x += speed;
+    const realSpeed = {
+      x: speed.x * baseSpeed,
+      y: speed.y * baseSpeed,
+    };
 
-    if (result.x !== 0 && result.y !== 0) {
-      result.x = result.x / Math.sqrt(2);
-      result.y = result.y / Math.sqrt(2);
+    if (magnitude > 1) {
+      return {
+        x: realSpeed.x / magnitude,
+        y: realSpeed.y / magnitude,
+      };
     }
-
-    return result;
+    return realSpeed;
   }
 );
 
 let previousDirection: Direction = 'Right';
 
-export const $heroDirection = batched([$keys], (keys): Direction => {
-  if (keys.up) {
+export const $heroDirection = batched([$hero], ({ speed }): Direction => {
+  if (speed.y < 0) {
     previousDirection = 'Up';
     return 'Up';
   }
-  if (keys.down) {
+  if (speed.y > 0) {
     previousDirection = 'Down';
     return 'Down';
   }
-  if (keys.right) {
+  if (speed.x > 0) {
     previousDirection = 'Right';
     return 'Right';
   }
-  if (keys.left) {
+  if (speed.x < 0) {
     previousDirection = 'Left';
     return 'Left';
   }
@@ -61,9 +61,9 @@ export const $heroDirection = batched([$keys], (keys): Direction => {
 });
 
 export const $heroAnimation = batched(
-  [$keys, $heroDirection],
-  (keys, direction) => {
-    if (keys.up || keys.down || keys.left || keys.right) {
+  [$normalizedSpeed, $heroDirection],
+  (speed, direction) => {
+    if (speed.x !== 0 || speed.y !== 0) {
       return `walk${direction}`;
     }
 
@@ -71,24 +71,20 @@ export const $heroAnimation = batched(
   }
 );
 
-export const $heroAnimationsSpeed = batched([$keys], (keys) => {
-  if (keys.shift) {
-    return DEFAULT_ANIMATION_SPEED * 2;
-  }
-
-  return DEFAULT_ANIMATION_SPEED;
+export const $heroAnimationsSpeed = batched([$hero], ({ baseSpeed }) => {
+  return (DEFAULT_ANIMATION_SPEED * baseSpeed) / DEFAULT_SPEED;
 });
 
-export const heroSetSpeed = (value: number) => {
+export const heroSetSpeed = (value: Coordinates) => {
   $hero.setKey('speed', value);
 };
 
 export const heroSetSprint = () => {
-  $hero.setKey('speed', SPRINT_SPEED);
+  $hero.setKey('baseSpeed', SPRINT_SPEED);
 };
 
 export const heroResetSpeed = () => {
-  $hero.setKey('speed', DEFAULT_SPEED);
+  $hero.setKey('baseSpeed', DEFAULT_SPEED);
 };
 
 export const heroSetPosition = (value: Coordinates) => {
