@@ -70,6 +70,7 @@ export class Hero {
     );
 
     this.heroContainer = new Container();
+    this.heroContainer.zIndex = 10;
     this.shadow = new Graphics()
       .ellipse(21, 57, 18, FOOTSTEP_HEIGHT / 2)
       .fill([0, 0, 0, 0.3]);
@@ -80,7 +81,7 @@ export class Hero {
     this.heroContainer.y =
       App.screen.height / 2 - this.heroContainer.height + FOOTSTEP_HEIGHT / 2;
 
-    App.stage.addChildAt(this.heroContainer, 1);
+    App.stage.addChild(this.heroContainer);
 
     this.checkNewPosition(this.startPosition, this.startPosition, true);
 
@@ -103,6 +104,8 @@ export class Hero {
     newPosition: Coordinates | null,
     force = false
   ) {
+    if (!oldPosition || !newPosition) return;
+
     eventEmitter.emit('checkHeroPosition', oldPosition, newPosition, force);
   }
 

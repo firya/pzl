@@ -1,42 +1,62 @@
-import { Assets, Container, Sprite } from 'pixi.js';
+import { Assets, Sprite } from 'pixi.js';
 
 import { App, eventEmitter } from '@/main.ts';
 import { Coordinates } from '@/types/common.ts';
-
-const tileSize = 500;
-export type LevelMap = Array<Array<number>>;
+import { $main } from '@/stores/main/main.ts';
 
 export class World {
-  private levelContainer: Container;
-  private levelMap: LevelMap;
+  private layers: Sprite[] = [];
+  private pixelData: Uint8ClampedArray;
+  private worldSize: Coordinates = {
+    x: 0,
+    y: 0,
+  };
+  initialized = false;
 
-  constructor(levelMap: LevelMap) {
-    this.levelMap = levelMap;
+  // TODO pass all layers and objects
+  //  Place objects on level and move it zIndex when character Y is more than
+  //  Maybe give object it's own go zone map and merge?
+  constructor() {
     this.init();
+  }
+
+  get isDebug() {
+    return $main.get().debug;
   }
 
   async init() {
     eventEmitter.on('checkHeroPosition', this.checkCollision.bind(this));
-
-    this.levelContainer = new Container();
-
     this.createLevel();
-
-    App.stage.addChildAt(this.levelContainer, 0);
   }
 
   async createLevel() {
-    for (let i = 0; i <= this.levelMap.length - 1; i++) {
-      for (let j = 0; j <= this.levelMap[i].length - 1; j++) {
-        const tile = this.levelMap[i][j];
-        const texture = tile
-          ? await Assets.load('grass')
-          : await Assets.load('grass2');
-        const sprite = new Sprite(texture);
-        sprite.position.set(j * tileSize, i * tileSize);
-        this.levelContainer.addChild(sprite);
-      }
-    }
+    Promise.allSettled([
+      this.createLayer('background', 0),
+      this.createLayer('foreground', 100),
+    ]);
+    await this.createGoZonesMap();
+
+    this.initialized = true;
+  }
+
+  async createLayer(textureName: string, zIndex = 0) {
+    const texture = await Assets.load(textureName);
+    const sprite = new Sprite(texture);
+    sprite.position.set(0, 0);
+    sprite.zIndex = zIndex;
+    this.layers.push(sprite);
+    App.stage.addChild(sprite);
+  }
+
+  async createGoZonesMap() {
+    const texture = await Assets.load('go_zones');
+    const sprite = new Sprite(texture);
+    this.worldSize = {
+      x: sprite.width,
+      y: sprite.height,
+    };
+    const extract = App.renderer.extract;
+    this.pixelData = extract.pixels(sprite).pixels;
   }
 
   checkCollision(
@@ -44,36 +64,119 @@ export class World {
     newPosition: Coordinates,
     force = false
   ) {
+    if (!this.initialized) return;
     if (force) {
       this.changeWorldPosition(newPosition);
-      return;
     }
 
-    let positionResult = { ...newPosition };
-
-    if (newPosition.x < 0 || newPosition.x > this.levelMap[0].length * tileSize)
-      positionResult.x = oldPosition.x;
-    if (newPosition.y < 0 || newPosition.y > this.levelMap.length * tileSize)
-      positionResult.y = oldPosition.y;
-    if (!this.checkPosition(oldPosition.x, newPosition.y))
-      positionResult.y = oldPosition.y;
-    if (!this.checkPosition(newPosition.x, oldPosition.y))
-      positionResult.x = oldPosition.x;
-
-    this.changeWorldPosition(positionResult);
+    const validPosition = this.getLastValidPosition(oldPosition, newPosition);
+    if (
+      validPosition.x !== oldPosition.x ||
+      validPosition.y !== oldPosition.y
+    ) {
+      this.changeWorldPosition(validPosition);
+    } else {
+      const alternative = this.findAlternativePath(oldPosition, newPosition);
+      if (alternative) {
+        this.changeWorldPosition(alternative);
+      }
+    }
   }
 
-  checkPosition(x: number, y: number) {
-    const tileX = Math.floor(x / tileSize);
-    const tileY = Math.floor(y / tileSize);
+  getLastValidPosition(oldPosition: Coordinates, newPosition: Coordinates) {
+    const path = this.getLinePath(oldPosition, newPosition);
+    let lastValidPosition = oldPosition;
 
-    return this.levelMap[tileY][tileX];
+    for (const point of path) {
+      if (!this.isPositionValid(point)) {
+        break;
+      }
+      lastValidPosition = point;
+    }
+
+    return lastValidPosition;
+  }
+
+  // Digital Differential Analyzer
+  getLinePath(start: Coordinates, end: Coordinates): Coordinates[] {
+    const points: Coordinates[] = [];
+
+    let { x: x0, y: y0 } = start;
+    const { x: x1, y: y1 } = end;
+
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+
+    const xIncrement = dx / steps;
+    const yIncrement = dy / steps;
+
+    for (let i = 0; i <= steps; i++) {
+      points.push({ x: Math.round(x0), y: Math.round(y0) });
+      x0 += xIncrement;
+      y0 += yIncrement;
+    }
+
+    return points;
+  }
+
+  isPositionValid(position: Coordinates): boolean {
+    const { x, y } = position;
+    if (x < 0 || y < 0 || x >= this.worldSize.x || y >= this.worldSize.y) {
+      return false;
+    }
+    const index = (y * this.worldSize.x + x) * 4;
+    return (
+      this.pixelData[index] === 255 &&
+      this.pixelData[index + 1] === 255 &&
+      this.pixelData[index + 2] === 255
+    );
+  }
+
+  findAlternativePath(oldPosition: Coordinates, newPosition: Coordinates) {
+    const directions = [
+      Math.PI / 6, // 30 degrees
+      -Math.PI / 6, // -30 degrees
+    ];
+
+    const deltaX = newPosition.x - oldPosition.x;
+    const deltaY = newPosition.y - oldPosition.y;
+
+    const originalAngle = Math.atan2(deltaY, deltaX);
+
+    for (const angle of directions) {
+      // Calculate the new angle by adding/subtracting 30 degrees
+      const newAngle = originalAngle + angle;
+
+      // Calculate the rotated vector using the new angle
+      const rotatedX =
+        Math.cos(newAngle) * Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const rotatedY =
+        Math.sin(newAngle) * Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+      // Calculate the alternative position
+      const alternativePosition = this.getLastValidPosition(oldPosition, {
+        x: oldPosition.x + rotatedX,
+        y: oldPosition.y + rotatedY,
+      });
+
+      if (
+        alternativePosition.x !== oldPosition.x ||
+        alternativePosition.y !== oldPosition.y
+      ) {
+        return alternativePosition;
+      }
+    }
+
+    return null; // No alternative path found
   }
 
   changeWorldPosition(position: Coordinates) {
-    if (!this.levelContainer) return;
+    if (!this.layers.length) return;
     eventEmitter.emit('changeHeroPosition', position);
-    this.levelContainer.x = -position.x + App.screen.width / 2;
-    this.levelContainer.y = -position.y + App.screen.height / 2;
+    for (const layer of this.layers) {
+      layer.x = -position.x + App.screen.width / 2;
+      layer.y = -position.y + App.screen.height / 2;
+    }
   }
 }

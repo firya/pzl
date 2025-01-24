@@ -1,0 +1,21 @@
+{
+  "bundles": [
+    {
+      "name": "level_1",
+      "assets": [
+        {
+          "alias": "go_zones",
+          "src": "/level_1_go_map.png"
+        },
+        {
+          "alias": "background",
+          "src": "/level_1_level_0.png"
+        },
+        {
+          "alias": "foreground",
+          "src": "/level_1_level_1.png"
+        }
+      ]
+    }
+  ]
+}
